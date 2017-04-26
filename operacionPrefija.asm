@@ -64,7 +64,7 @@ prefija resb 256
         jmp final
     solucion:
         nwln
-        PutStr mensaje ;resultado
+        PutStr prefija ;resultado
        
     
     final:
@@ -113,7 +113,7 @@ finalizarElmEsp:
 generaPrefija:
 xor esi, esi ;
 xor edi, edi ;
-mov word [EBP + 16], 18 ; Eso
+mov word [EBP + 12], 12 ; Eso
     
 cicloGenPre:
     mov dl, byte[operacion+esi];Se mueve al dl el contenido de operacion actual
@@ -167,18 +167,17 @@ error_gen:
     jmp fin_Aux
 
 comparacion:
-    mov [EBP + 8], ebx          ;Se guarda el valor del ebx en la pila
-    mov [EBP + 12], esi         ;Y el valor del esi
+    mov [EBP + 8], esi         ;Y el valor del esi
     valorPrecedencia dl         ;Se obtiene el valor de precedencia
     ;En este punto el ax tiene el conector en el ah y el valor en el al
     
-    cmp word [EBP + 16], 18          ;si no se ha ingresado nadie, agreguelo a la pila
+    cmp word [EBP + 12], 12          ;si no se ha ingresado nadie, agreguelo a la pila
     je guardarEnPila
-    ;0-7 = EBP, 8-11 = ebx, 12-15 = esi, 16-17 a contador
+    ;0-7 = EBP, 8-11 = esi, 12-14 = a contador
     ;Si se ha ingresado a alguien se saca el conector y su valor de la pila
+    
     xor ebx, ebx
-        
-    mov bx, [EBP + 16]          ;Se obtiene el desplazamiento para llegar al valor anterior
+    mov bx, [EBP + 12]          ;Se obtiene el desplazamiento para llegar al valor anterior
     mov dx, [EBP + ebx]         ;se pasa a dx el conector y su valor
         
     cmp al, dl                  ;Si el conector actual tiene mayor prioridad
@@ -188,13 +187,11 @@ comparacion:
         
     
 guardarEnPila:;Si la pila esta vacia
-    mov word [EBP + 16], 18 ; Eso
+    mov word [EBP + 12], 14 ; Eso
         
-    mov [EBP+18], ax ;Se guarda en la pila el conector y su valor
-    PutInt word [EBP+18]
+    mov [EBP+14], ax ;Se guarda en la pila el conector y su valor
        
-    mov ebx, [EBP + 8] ;Se restablecen
-    mov esi, [EBP + 12] ;También
+    mov esi, [EBP + 8] ;También
         
     mov byte[prefija+edi], 20h ;Se pone un espacio en el string
     inc edi ;Se incrementa la direccion de destino
@@ -206,22 +203,23 @@ mayorPrioridad: ;Se guardan los dos en la pila
     add bx, 2
     mov word [EBP + ebx], ax ;Se guarda el valor actual
         
-    mov [EBP + 16], bx ;Se aumenta en dos la direccion
-    
-    mov ebx, [EBP + 8] ;Se restablecen
-    mov esi, [EBP + 12] ;También
+    mov [EBP + 12], bx ;Se aumenta en dos la direccion
+   
+    mov esi, [EBP + 8] ;También
         
     mov byte[prefija+edi], ' ' ;Se escribe un espacio
     inc edi
         
     jmp cicloGenPre_aux ;Se sigue el ciclo
     
-menorPrioridad:       
-    mov [EBP + ebx], ax ;Se guarda el valor actual
-    mov ebx, [EBP + 8] ;Se restablecen
-    mov esi, [EBP + 12] ;También
+menorPrioridad:
+    mov word [EBP + ebx], ax ;Se guarda el valor actual
     
+    mov esi, [EBP + 8] ;También
+    
+    mov byte[prefija+edi], 20h ;Se escribe un espacio
     inc edi
+    
     mov byte[prefija+edi], dh ;Se escribe el conector que se saco de pila
     inc edi
         
@@ -231,12 +229,12 @@ menorPrioridad:
     jmp cicloGenPre_aux
     
 finalizarGenPre:
-    cmp word [EBP + 16], 18 ; Si no se han ingresado conectores se salta al final
+    cmp word [EBP + 12], 12 ; Si no se han ingresado conectores se salta al final
     je fin_Aux
     
     xor eax, eax
     xor ebx, ebx
-    mov bx, [EBP + 16] ;Se obtiene el desplazamiento para llegar al valor anterior
+    mov bx, [EBP + 12] ;Se obtiene el desplazamiento para llegar al valor anterior
     mov byte[prefija+edi], ' ' ;Se escribe un espacio
     inc edi
         
@@ -250,7 +248,7 @@ finalizarGenPre:
         inc edi
         
         sub bx, 2
-        cmp bx, 16
+        cmp bx, 12
         jne ciclo_prueba
             
 fin_Aux:
