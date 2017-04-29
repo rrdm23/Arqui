@@ -8,32 +8,64 @@
 ; Toma un valor de parametro y busca su valor en la variable precedencia
 ; AL encontrarlo, guarda el caracter en el ah y su valor en el al
 ; Por esto, el valor del ax que da modificado
-     %macro valorPrecedencia 1
-        xor ebx, ebx
-        xor esi, esi
+%macro valorPrecedencia 1
+    xor ebx, ebx
+    xor esi, esi
         
-        mov ebx, precedencia
-        cicloPrece:
-            cmp byte[ebx+esi], %1
-            je finalizarPrece
+    mov ebx, precedencia
+    cicloPrece:
+        cmp byte[ebx+esi], %1
+        je finalizarPrece
             
-            cmp byte [ebx+esi], '$'
-            je finalizarPrece
+        cmp byte [ebx+esi], '$'
+        je finalizarPrece
             
-            inc esi
-            jmp cicloPrece
+        inc esi
+        jmp cicloPrece
         
-        finalizarPrece:
-            inc esi
-            mov ah, %1 ;Se guarda el conector en el ah
-            mov al, byte[precedencia+esi] ;Y luego se guarda el valor del conector en al
-     %endmacro
+    finalizarPrece:
+        inc esi
+        mov ah, %1 ;Se guarda el conector en el ah
+        mov al, byte[precedencia+esi] ;Y luego se guarda el valor del conector en al
+%endmacro
 
+;------------------------------------------------------------------------------------------
+;Macro: esNumero
+; Toma un valor de parametro y busca si trata de un número permitido dentro de las bases aceptadas
+; devuelve el valor en el dh, un 1 si es verdad y un 0 si no se trata de un número
+%macro esNumero 1
+     
+    cmp %1, '0'         ;Si es menor a '0'
+    jb no_esNumero
+        
+    cmp %1, '9'         ;Si es menor o igual a '9'
+    jbe si_esNumero
+    
+    cmp %1, 41h
+    jb no_esNumero
+    
+    cmp %1, 46h
+    jbe si_esNumero
+    
+    jmp no_esNumero
+    
+    si_esNumero:
+        mov dh, 1
+        jmp final_esNumero
+    
+    no_esNumero:
+        mov dh, 0
+    
+    final_esNumero: ;Termina el macro
+    %endmacro
+
+    
      
 .DATA
     mensaje db "Hola mundo", 0
     precedencia db '*', 10,  '/',10,  '+',5,  '-',5,    '$',0
     mensajeError db "Se ingreso un caracter incorecto", 0
+    prueba db "2FH",0
     
 
 .UDATA
@@ -65,6 +97,8 @@ prefija resb 256
     solucion:
         nwln
         PutStr prefija ;resultado
+        nwln
+        call convertirADecimal
        
     
     final:
@@ -120,6 +154,12 @@ cicloGenPre:
         
     cmp dl, 0
     je finalizarGenPre  ;Si es 0 se finaliza el ciclo
+    
+    cmp dl, '('
+    je parentesisIzq
+    
+    cmp dl, ')'
+    je parentesisDer
         
     cmp dl, '+'
     je comparacion
@@ -133,13 +173,11 @@ cicloGenPre:
     cmp dl, '-'
     je comparacion
         
-    cmp dl, '0'         ;Si es menor a '0'
-    jb error_gen
-        
-    cmp dl, '9'         ;Si es menor o igual a '9'
-    jbe esNumeroOBase
+    esNumero dl
+    cmp dh, 1
+    je esNumeroOBase
     
-    cmp dl, 'b'
+    cmp dl, 'b'             ;Pasar esta area a macro
     je esNumeroOBase
         
     cmp dl, 'o'
@@ -150,13 +188,56 @@ cicloGenPre:
         
     cmp dl, 'h'
     je esNumeroOBase
-        
+    
     jmp error_gen
         
 cicloGenPre_aux:
     inc esi
     jmp cicloGenPre
+
+parentesisIzq:
+    xor ebx, ebx
+    mov bx, [EBP + 12] ;Obtengo el desplazamiento
+    add bx, 2 ;Agrego dos para llegar a la siguiente casilla
+    mov al, 0 ;Se pone de precedencia 0
+    mov ah, '(' ; a (
+    mov [EBP + ebx], ax ;y se guarda
+    mov [EBP + 12], bx ;se guarda el nuevo desplazamiento
+    jmp cicloGenPre_aux
+    
+parentesisDer:
+    xor ebx, ebx
+    mov bx, [EBP + 12] ;Se obtiene el desplazamiento para llegar al ultimo valor en la pila
+    mov byte[prefija+edi], ' ' ;Se escribe un espacio
+    inc edi
         
+    ciclo_parentesis:
+        mov dx, [EBP + ebx] ;se pasa a dx el conector y su valor
+        
+        cmp dh, '('
+        je fin_parentesis
+        
+        cmp bx, 12
+        je error_gen
+        
+        mov byte[prefija+edi], dh ;Se escribe un conector
+        inc edi
+            
+        mov byte[prefija+edi], ' ' ;Se escribe un espacio
+        inc edi
+        
+        sub bx, 2
+        jmp ciclo_parentesis
+    
+    fin_parentesis:
+        mov byte[prefija+edi], 0 ;Se escribe un espacio
+        dec edi
+        
+        sub bx, 2
+        mov [EBP + 12], ebx
+        jmp cicloGenPre_aux
+    
+
 esNumeroOBase:
     mov byte[prefija+edi], dl   ;Se escribe el digito
     inc edi                     ;Y se incrementa el edi
@@ -187,9 +268,10 @@ comparacion:
         
     
 guardarEnPila:;Si la pila esta vacia
-    mov word [EBP + 12], 14 ; Eso
-        
+    mov word [EBP + 12], 14
+    
     mov [EBP+14], ax ;Se guarda en la pila el conector y su valor
+    
        
     mov esi, [EBP + 8] ;También
         
@@ -253,4 +335,67 @@ finalizarGenPre:
             
 fin_Aux:
     mov byte[prefija+edi], 0
+    ret
+    
+
+;Proc: convertir a decimal
+; Recibe la base fuente en el edx, procesa el numero para obtener su valor decimal
+; una vez que lo tiene lo guarda en el ax
+convertirADecimal:
+xor esi, esi
+xor eax, eax
+xor ecx, ecx
+xor edx, edx
+
+PutInt 4202
+nwln
+
+mov cl, [prueba + esi]
+cmp cl, 20h ;Compara si hay un espacio en el siguiente, en casos como 'd '
+je error_conversion
+    
+cmp cl, 0 ;Compara si hay un espacio en el siguiente, en casos como 'd '
+je error_conversion
+
+jmp ciclo_conversion
+
+error_conversion:
+    PutStr mensaje ;mensaje de error
+    nwln
+    ret
+    
+ciclo_conversion:
+    mov dl, 16      ;El dl guarda la base destino
+    sub cl, 30h     ;Se resta 30 para llegar al valor del numero
+    
+    cmp cl, 9;
+    ja valLetra     ;si es mayor a 9, es un caracter hex entre A y F
+    
+    valNumero:
+        cmp cl, dl  ;Si igual o mayor que la base
+        jae error_conversion    ;hay error
+        jmp suma    ;si no se sigue la conversion
+    
+    valLetra:
+        sub cl, 7h  ;se resta 7 para llega al valor del nuemero hex
+        cmp cl, dl  ;si es mayor que la base
+        jae error_conversion    ;se salta a error
+        
+    suma:
+        mul dl      ;Se multiplica lo acumulado en el 
+        add ax, cx
+    
+    inc esi
+    mov cl, [prueba + esi]
+    
+    cmp cl, 20h ;Compara si hay un espacio
+    je imprime  ;
+    
+    cmp cl, 0
+    je imprime
+    
+    jmp ciclo_conversion
+        
+imprime:
+    PutInt ax
     ret
