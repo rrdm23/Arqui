@@ -31,77 +31,135 @@
 
 ;------------------------------------------------------------------------------------------
 ;Macro: esNumero
-; Toma un valor de parametro y busca si trata de un número permitido dentro de las bases aceptadas
-; devuelve el valor en el dh, un 1 si es verdad y un 0 si no se trata de un número
+; Toma un valor de parametro y busca si trata de un carcter de número o de una letra aceptada
 %macro esNumero 1
      
     cmp %1, '0'         ;Si es menor a '0'
-    jb no_esNumero
+    jb error_gen
         
     cmp %1, '9'         ;Si es menor o igual a '9'
-    jbe si_esNumero
+    jbe esNumeroOBase
     
     cmp %1, 41h
-    jb no_esNumero
+    jb error_gen
     
     cmp %1, 46h
-    jbe si_esNumero
-    
-    jmp no_esNumero
-    
-    si_esNumero:
-        mov dh, 1
-        jmp final_esNumero
-    
-    no_esNumero:
-        mov dh, 0
-    
-    final_esNumero: ;Termina el macro
+    jbe esNumeroOBase
+
     %endmacro
 
+;------------------------------------------------------------------------------------------
+;Macro: cmpStrings
+; Entrada: Dos cadenas de caracteres y un label
+; Compara dos cadenas de carcteres, si son iguales realiza el salto, si no lo son solo termina el macro
+%macro cmpStrings 3
+    push esi
+    xor esi, esi
     
+    cicloComp:
+    mov cl, byte[%1+esi]
+    mov ch, byte[%2+esi]
+    
+    cmp cl, ch
+    jne %%falseCmp
+    
+    cmp cl, 0
+    je %3
+    
+    inc esi
+    jmp cicloComp
+    
+    %%falseCmp:
+    pop esi
+    %endmacro
      
 .DATA
-    mensaje db "Hola mundo", 0
+    mensaje db "Ingrese un comando o una operacion infija: ", 0
+    men_errorOverflow db "Error: Se ha generado un número con un mayor tamaño del que se puede trabajar.", 0
+    men_errorCaracter db "Error: Se ingreso una variable sin definir.", 0
+    men_errorBase db "Error: Se ingreso un número que no pertenece al base indicada.", 0
+    men_errorComando db "Error: No se ha encontrado el comando ingresado.", 0
+    mensajeTemp db "Ahorita no joven, estamos terminado esta parte del codigo",0
+    
+    comando_ayuda db "#ayuda", 0
+    comando_procedimientos db "#procedimientos", 0
+    comando_bits db "#bits", 0
+    comando_var db "#var", 0
+    comando_salir db "#salir", 0
+    
     precedencia db '*', 10,  '/',10,  '+',5,  '-',5,    '$',0
-    mensajeError db "Se ingreso un caracter incorecto", 0
-    prueba db "2FH",0
+    resultado dd 0
+    prueba db "2",0
     
 
 .UDATA
 operacion resb 256
 prefija resb 256
+lineaComandos resb 256
 
 .CODE
      .STARTUP    
 ;------------------Codigo segment------------------
-     lectura:
-        GetStr operacion, 256 ;Se guarda en operacion el string de la linea de comandos
-        mov ebx, operacion ;Se mueve a operacion al ebx
-        call eliminaEspacios ;y se llama a eliminaEspacios para borrar todos los espacios del contenido del ebx
-     
-     ;Aqui se llama el proc que lee la base en que se devuelve el resultado
-     ;Y se deja a operacion solo con numeros y conectores aritmeticos, ok?
-       
-        nwln    ;ahora llamo al que hace la conversion y imprimo el resultado
-        PutStr mensaje  ;resultado de elimina espacios
-     conversion:
-        enter 0,0 ;Se guardar el EBP
-        call generaPrefija
-        nwln
-        cmp byte [prefija], '~'
-        jne solucion
+inicio: PutStr mensaje              ;Se indica al usuario que puede usar un número o un comando 
+    GetStr lineaComandos, 256   ;Se guarda el contenido de la linea de comandos en la variable
+    mov ebx, lineaComandos     
+    call eliminaEspacios        ;Se llama a eliminaEspacios para borrar todos los espacios del contenido del ebx
         
-        PutStr mensajeError
-        jmp final
-    solucion:
-        nwln
-        PutStr prefija ;resultado
-        nwln
-        call convertirADecimal
-       
+    cmp byte[lineaComandos], '#'    ;Verifica si se trata de un comando
+    je comandos
     
-    final:
+    cmp byte[lineaComandos], '~'    ;Verifica si se trata de un complemento de base
+    je complementoDeBase
+        
+    cmp byte[lineaComandos], '.'    ;Verifica si se trata de convertir a punto flotante binario
+    je convPuntoBinario
+    
+    jmp iniciarOperacion
+
+;Lectura de los comandos
+comandos: ;Hace una sere de comparaciones, si una comparacion es verdadera se hace un salto, sino se pasa a la siguiente comparacion
+    cmpStrings lineaComandos, comando_ayuda, final
+    cmpStrings lineaComandos, comando_procedimientos, final
+    cmpStrings lineaComandos, comando_bits, final
+    cmpStrings lineaComandos, comando_var, final
+    cmpStrings lineaComandos, comando_salir, final
+    
+    PutStr men_errorComando ;Si el comando no es comatible con nadie.. 
+    nwln
+    jmp inicio  ;
+    
+PutStr mensajeTemp
+    nwln
+    jmp inicio
+
+;Converison de un numero a su complementoDeBase binario
+complementoDeBase:PutStr mensajeTemp
+    nwln
+    jmp inicio
+
+;Conversion del numero a binario flotante
+convPuntoBinario:PutStr mensajeTemp
+    nwln
+    jmp inicio
+
+;Solcion de la operacion ingresada
+iniciarOperacion: enter 0,0 ;Se guardar el EBP
+    call generaPrefija
+    nwln
+    
+    cmp byte [prefija], '~' ;Si no se devolvió un error
+    jne resolver            ;Se avanza
+        
+    jmp inicio
+
+resolver:
+    nwln
+    PutStr prefija ;resultado
+    nwln
+    call convertirADecimal
+    jmp inicio
+           
+final:
     nwln
 .EXIT
 ;------------------Codigo ends------------------
@@ -142,8 +200,7 @@ finalizarElmEsp:
 ;    - Si la pila esta vacia se gurda el conector
 ;    - Si el conector que esta tiene mayor precedencia se guardan los dos
 ;    - Si tiene menor precedencia se escribe el que se saca y el actual se guarda en la pila
-;Faltan: Parentesis
-
+;    - Maneja los parentesis
 generaPrefija:
 xor esi, esi ;
 xor edi, edi ;
@@ -151,7 +208,8 @@ mov word [EBP + 12], 12 ; Eso
     
 cicloGenPre:
     mov dl, byte[operacion+esi];Se mueve al dl el contenido de operacion actual
-        
+    push dx
+    
     cmp dl, 0
     je finalizarGenPre  ;Si es 0 se finaliza el ciclo
     
@@ -173,8 +231,7 @@ cicloGenPre:
     cmp dl, '-'
     je comparacion
         
-    esNumero dl
-    cmp dh, 1
+    esNumero dl     ;Comprueba si es un número, de serlo salta a esNumeroOBase
     je esNumeroOBase
     
     cmp dl, 'b'             ;Pasar esta area a macro
@@ -360,7 +417,7 @@ je error_conversion
 jmp ciclo_conversion
 
 error_conversion:
-    PutStr mensaje ;mensaje de error
+    PutStr men_errorBase ;mensaje de error
     nwln
     ret
     
