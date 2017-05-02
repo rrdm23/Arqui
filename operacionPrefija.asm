@@ -166,6 +166,7 @@ final_obtBase:
     men_procedOff db "Ahora se ocultaran los procedimientos.", 0
     
     mensajeTemp db "Ahorita no joven, estamos terminado esta parte del codigo",0
+	igual db '=',0
     
     comando_ayuda db "#ayuda", 0
     comando_procedimientos db "#procedimientos", 0
@@ -173,15 +174,16 @@ final_obtBase:
     comando_var db "#var", 0
     comando_salir db "#salir", 0
     
-    precedencia db '*', 10,  '/',10,  '+',5,  '-',5,    '$',0
+    precedencia db '*', 10,  '/',10,  '+',5,  '-',5,  '$',0
     resultado dd 0
     mostrarProced db 0;
     prueba db "2",0
-    
+    flag_negativo db 0 ;valor booleano para saber si es negativo ono :)
 
 .UDATA
-operacion resb 256
+strComplemento resb 256
 prefija resb 256
+prefijaAux resb 256
 lineaComandos resb 256
 baseRespuesta resb 1;Guarda el valor de la base en la parte alta y el char de la base en la parte baja
 .CODE
@@ -252,6 +254,7 @@ convPuntoBinario:PutStr mensajeTemp
 iniciarOperacion: enter 0,0 ;Se guardar el EBP
 	mov ebx, lineaComandos
     call generaPrefija
+	
     cmp byte [prefija], '~' ;Si no se devolvió un error
     jne resolver            ;Se avanza
     
@@ -260,6 +263,8 @@ iniciarOperacion: enter 0,0 ;Se guardar el EBP
     jmp inicio
 
 resolver:
+	call ajustarPrefija ;Se ajustan los espacios
+	enter 0,0
     call resolverPrefija
     jmp inicio
            
@@ -310,6 +315,13 @@ finalizarElmEsp:
 generaPrefija:
 xor esi, esi ;
 xor edi, edi ;
+mov ecx, 256
+cilo_reparaFallo:
+	mov byte[prefija+edi], 0
+	inc edi
+	loop cilo_reparaFallo
+xor edi, edi
+	
 mov [EBP+12], ebx ;se tiene en el ebx la direccion de la operacion
 mov word [EBP + 16], 16 ; Eso
   
@@ -356,9 +368,8 @@ baseRes: inc esi
 	baseRes_hex: mov byte[baseRespuesta], 16
 	jmp finalizarGenPre
 
-cicloGenPre:
-	mov ebx, [EBP+12] ;se tiene en el ebx la direccion de la operacion
-    mov dl, byte[ebx+esi];Se mueve al dl el contenido de operacion actual
+cicloGenPre: mov ebx, [EBP+12] 	;se tiene en el ebx la direccion de la operacion
+    mov dl, byte[ebx+esi]		;Se mueve al dl el contenido de operacion actual
 
     cmp dl, 0
     je baseRes_dec  ;Si es 0 se finaliza el ciclo
@@ -366,26 +377,78 @@ cicloGenPre:
 	cmp dl, '='
 	je baseRes
     
-    esConector dl
+    cmp dl, '('
+    je parentesisIzq
+    
+    cmp dl, ')'
+    je parentesisDer
+        
+    cmp dl, '+'
+    je cambioSignosPos
+        
+    cmp dl, '*'
+    je comparacion
+        
+    cmp dl, '/'
+    je comparacion
+        
+    cmp dl, '-'
+    je cambioSignosNeg
         
     esNumero dl     	;Comprueba si es un número, de serlo salta a esNumeroOBase
     
     esBase dl			;Comprueba si es base
     
     jmp error_gen
-        
+
+cambioSignosPos:
+	cmp byte[ebx+esi+1], '-'
+	je cambioPosNeg
+	
+	cmp byte[ebx+esi+1], '+'
+	je cambioPosPos
+	
+	jmp comparacion
+	
+	cambioPosNeg: inc esi
+		mov byte[ebx+esi], '-'
+		jmp cicloGenPre
+	
+	cambioPosPos: inc esi
+		mov byte[ebx+esi], '+'
+		jmp cicloGenPre
+
+cambioSignosNeg:
+	cmp byte[ebx+esi+1], '-'
+	je cambioNegNeg
+	
+	cmp byte[ebx+esi+1], '+'
+	je cambioNegPos
+	
+	jmp comparacion
+	
+	cambioNegNeg: inc esi
+		mov byte[ebx+esi], '+'
+		jmp cicloGenPre
+	
+	cambioNegPos: inc esi
+		mov byte[ebx+esi], '-'
+		jmp cicloGenPre
+
 cicloGenPre_aux:
     inc esi
     jmp cicloGenPre
 
-parentesisIzq:
-    xor ebx, ebx
-    mov bx, [EBP + 16] ;Obtengo el desplazamiento
-    add bx, 2 ;Agrego dos para llegar a la siguiente casilla
-    mov al, 0 ;Se pone de precedencia 0
-    mov ah, '(' ; a (
+parentesisIzq: xor ebx, ebx
+    mov bx, [EBP + 16] 	;Obtengo el desplazamiento
+	add bx, 2 			;Agrego dos para llegar a la siguiente casilla
+    mov al, 0 			;Se pone de precedencia 0
+    mov ah, '(' 		; a (
     mov [EBP + ebx], ax ;y se guarda
     mov [EBP + 16], bx ;se guarda el nuevo desplazamiento
+	nwln
+	PutInt bx
+	nwln
     jmp cicloGenPre_aux
     
 parentesisDer:
@@ -413,11 +476,8 @@ parentesisDer:
         jmp ciclo_parentesis
     
     fin_parentesis:
-        mov byte[prefija+edi], 0 	;Se sobreescribe el ultimo espacio
-        dec edi 
-        
         sub bx, 2 			;Se resta el bx para no poder acceder luego al parentesis izquierdo
-        mov [EBP + 16], ebx
+        mov [EBP + 16], bx
         jmp cicloGenPre_aux
 		
 esNumeroOBase:
@@ -431,7 +491,7 @@ error_gen:
     ret
 
 comparacion:
-    mov [EBP + 8], esi         ;Y el valor del esi
+    mov [EBP + 8], esi         	;Lo guarda
     valorPrecedencia dl         ;Se obtiene el valor de precedencia
 	mov esi, [EBP + 8] ;Se restablece el esi
     ;En este punto el ax tiene el conector en el ah y el valor en el al
@@ -446,7 +506,7 @@ comparacion:
     mov dx, [EBP + ebx]         ;se pasa a dx el conector y su valor
         
     cmp al, dl                  ;Si el conector actual tiene mayor prioridad
-    jae mayorPrioridad          ;se salta a mayorPrioridad
+    ja mayorPrioridad          ;se salta a mayorPrioridad
         
     jmp menorPrioridad ;Si no se salta a menor prioridad
         
@@ -473,36 +533,36 @@ mayorPrioridad: ;Se guardan los dos en la pila
     jmp cicloGenPre_aux ;Se sigue el ciclo
     
 menorPrioridad:
-    mov word [EBP + ebx], ax ;Se guarda el valor actual
+    mov word [EBP + ebx], ax 	;Se guarda el valor actual
     
-    mov byte[prefija+edi], 20h ;Se escribe un espacio
+    mov byte[prefija+edi], 20h 	;Se escribe un espacio
     inc edi
     
-    mov byte[prefija+edi], dh ;Se escribe el conector que se saco de pila
+    mov byte[prefija+edi], dh 	;Se escribe el conector que se saco de pila
     inc edi
         
-    mov byte[prefija+edi], 20h ;Se escribe un espacio
+    mov byte[prefija+edi], 20h 	;Se escribe un espacio
     inc edi
         
     jmp cicloGenPre_aux
     
-finalizarGenPre:
+finalizarGenPre: ;Se saca todo lo que hay en la pila antes de terminar
     cmp word [EBP + 16], 16 ; Si no se han ingresado conectores se salta al final
     je fin_Aux
     
     xor eax, eax
     xor ebx, ebx
-    mov bx, [EBP + 16] ;Se obtiene el desplazamiento para llegar al valor anterior
-    mov byte[prefija+edi], ' ' ;Se escribe un espacio
+    mov bx, [EBP + 16] 			;Se obtiene el desplazamiento para llegar al valor anterior
+    mov byte[prefija+edi], ' ' 	;Se escribe un espacio
     inc edi
         
     ciclo_prueba:
         mov dx, [EBP + ebx] ;se pasa a dx el conector y su valor
             
-        mov byte[prefija+edi], dh ;Se escribe un conector
+        mov byte[prefija+edi], dh 	;Se escribe un conector
         inc edi
             
-        mov byte[prefija+edi], ' ' ;Se escribe un espacio
+        mov byte[prefija+edi], ' ' 	;Se escribe un espacio
         inc edi
         
         sub bx, 2
@@ -511,21 +571,59 @@ finalizarGenPre:
             
 fin_Aux:
     mov byte[prefija+edi], 0
+	cmp byte[prefija+edi-1], 20h
+	je validacionExtra
     ret
+validacionExtra:
+	mov byte[prefija+edi-1], 20h
+	ret
+;***------------------------------------------------------------------------------------------------------------***
+;Proc: Ajustar espacios prefija
+; Lee la varibale prefija para ir ajustando los espacios para que no se generen secciones con más de un espacio
+ajustarPrefija:
+xor esi, esi
+xor edi, edi
+
+cicloBusq:
+	mov cl, [prefija+esi] 	;Se mueve el contenido de la casilla
+	cmp cl, 20h 
+	jne cicloTranscripcion 	;Si no es un espacio se pega
+	
+	cmp cl, 0				;Si de casualidad se llega a 0 aqui se termina el proc
+	je final_ajustar		
+	
+	inc esi					;Se incrementa el esi para llegar a la siguiente casilla
+	jmp cicloBusq			;Y se continua el ciclo
+
+cicloTranscripcion: mov [prefija+edi], cl	;Se hace apste
+	inc edi	;Se incrementan el destiny y source
+	inc esi
+	
+	cmp cl, 20h	;Si se llega a un espacio se salta al ciclo de busqueda para no copiar más de un espacio
+	je cicloBusq
+	
+	cmp cl, 0
+	je final_ajustar
+	mov cl, [prefija+esi]
+	jmp cicloTranscripcion
+	
+final_ajustar:
+	ret
 
 ;***------------------------------------------------------------------------------------------------------------***
 ;Proc: Resolver prefija
 ; Lee la varibale prefija para 
-resolverPrefija:
+resolverPrefija: mov byte[resultado],0
 
 iniciarCicloResolver:
 	nwln
-	PutInt 1111
-	nwln
-	PutStr prefija
+	PutStr prefija ;Imprime paso a paso l
 	nwln
 	xor esi, esi ;Se limpia el esi
 	mov dword[EBP+12], 16 ;Se coloca en 12 al valor de referencia
+	jmp ciclo_resolver
+
+espacio: inc esi
 
 ciclo_resolver:
 	mov cl, [prefija+esi]	;Se guarda en cl el caracter
@@ -533,7 +631,7 @@ ciclo_resolver:
 	je printSolucion
 	
 	cmp cl, 20h
-	je printSolucion
+	je espacio
 	
 	xor edx, edx
 	obtenerBase ;Se obtiene el valor de la base en el dl
@@ -541,8 +639,17 @@ ciclo_resolver:
 	je buscarOperando ;Es porque se leyo un operando
 	
 	mov [EBP+8], edx ;De ser número se gurda el valor de la base en el EBP+8 a EBP+11
-
+	mov ebx, prefija
 	call convertirADecimal ;Se convierte a decimal y se guarda en la pila
+	
+	mov dl, [EBP+8] 	; Se obtiene la base
+	xor ebx, ebx 		;Se limpia el puntero de base
+	mov bx,[EBP+12] 	;La direccion de un puntero a base vacio
+	mov [EBP+ebx], dl 	;Se guarda la base
+	inc ebx				;Y en la siguiente casilla se guarda el número
+	mov [EBP+ebx], eax 	;Se guarda el numero
+	add word[EBP+12], 5 ;Se aumenta en 5 para apuntar a una casilla de base vacia
+	
 	inc esi
 	jmp ciclo_resolver
 	
@@ -550,33 +657,105 @@ ciclo_resolver:
 	cmp cl, '+'
 	je sumar
 	
+	cmp cl, '-'
+	je restar
+	
+	cmp cl, '*'
+	je multiplicar
 	jmp printSolucion
 
-sumar: cmp word [EBP+12], 21 ;Compara para saber si solo hay un elemento en la pila
-	mov bx, [EBP+12] 	;Mueve el puntero a casilla de base vacia
+sumar: mov bx, [EBP+12] 	;Mueve el puntero a casilla de base vacia
 	sub bx, 4 			;Se mueve para apuntar a un número
-	mov ecx, [EBP+ebx] 	;Se mueve el ultimo numero a ecx
+	mov eax, [EBP+ebx] 	;Se mueve el ultimo numero a ecx
 	
-	sub bx, 5	;Se apunta al numero anterior
-	mov eax, [EBP+ebx] 	;Se guarda el numero en eax
+	cmp word [EBP+12], 21 ;Compara para saber si solo hay un elemento en la pila como +4
+	je guardarResultado
+	;Se consigue un segundo número en otro caso
+	
+	sub bx, 5			;Se apunta al numero anterior
+	mov ecx, [EBP+ebx] 	;Se guarda el numero en ecx
+	
+	test ecx, ecx	;Comprueba si el segundo operando negativo o positivo
+	js suma_negativo
 	
 	add eax, ecx 		;Se realiza la operacion
-	mov [resultado], eax
-	mov [EBP+ebx],eax 		;Se guarda el resultado
+	jmp guardarResultado
+	
+	suma_negativo:
+		neg dword[EBP+ebx]
+		jmp restar
+
+restar: mov bx, [EBP+12] 	;Mueve el puntero a casilla de base vacia
+	sub bx, 4 				;Se mueve para apuntar a un número
+	mov eax, [EBP+ebx] 		;Se mueve el ultimo numero a ecx
+	
+	cmp word [EBP+12], 21 ;Compara para saber si solo hay un elemento en la pila que se busca negar
+	je negarNumero 
+	
+	;Se consigue un segundo número en otro caso
+	sub bx, 5			;Se apunta al numero anterior
+	mov ecx, [EBP+ebx] 	;Se guarda el numero en ecx
+	cmp ecx, eax ;Se busca saber si se puede generar un negativo
+	jb restNegativo
+	
+	sub ecx, eax 		;Se realiza la operacion
+	mov eax, ecx		;Listo!
+	jmp guardarResultado
+
+	negarNumero: neg eax
+		mov dword[EBP+ebx], eax ;Se niega el numero
+		inc esi
+		mov [resultado], eax
+		
+		cmp byte[prefija+esi], 0 ;Si el siguiente es un 0
+		je printSolucion ;Se devuelve el numero
+		
+		jmp ciclo_resolver
+	
+	restNegativo: sub ecx, eax 		;Se realiza la operacion
+		mov eax, ecx		;Listo!
+		jmp guardarResultado
+
+multiplicar: mov bx, [EBP+12] 	;Mueve el puntero a casilla de base vacia
+	sub bx, 4 				;Se mueve para apuntar a un número
+	mov ecx, [EBP+ebx] 		;Se mueve el ultimo numero a ecx
+	
+	cmp word [EBP+12], 21 ;Compara para saber si solo hay un elemento en la pila que se busca negar
+	je error_cantConectores
+	
+	;Se consigue un segundo número en otro caso
+	sub bx, 5			;Se apunta al numero anterior
+	mov eax, [EBP+ebx] 	;Se guarda el numero en ecx
+	mul ecx				;Se realiza la operacion
+	jmp guardarResultado
+
+error_cantConectores:
+	nwln
+	PutInt 3333
+	nwln
+	ret
+
+guardarResultado:
+	mov [resultado], eax	;Se guarda en resultado en la variable por si se termina en esta operación
+	mov [EBP+ebx],eax 		;Se guarda el resultado en la pila
 	mov cl, [baseRespuesta]
 	mov byte[EBP+ebx-1], cl	;Se guarda la base que el user quiere
 	
 	dec ebx
 	mov [EBP+12], bx 	;Se guarda el puntero a la base del ultimo numero
-	inc esi
-	
+
+reiniciarCiclo:
 	call restausarPrefija
+	mov ebx, prefija
+	call ajustarPrefija
 	jmp iniciarCicloResolver
 
-printSolucion: 
-	PutStr prefija
+printSolucion: cmp byte[resultado],0
+	je sumar
 	nwln
 	PutInt 4202
+	nwln
+	PutStr prefija ;Imprime la solucion de la opracion
 	nwln
 	PutLInt [resultado]
 	nwln
@@ -608,32 +787,44 @@ ciclo_restaurar:
 	je print_dec
 	
 	print_hex:
-	mov byte[prefija+edi], 'h'
+	mov byte[prefijaAux+edi], 'h'
 	jmp iniciarCiclo
 	
 	print_dec:
-	mov byte[prefija+edi], 'd'
+	mov byte[prefijaAux+edi], 'd'
 	jmp iniciarCiclo
 	
 	print_oct:
-	mov byte[prefija+edi], 'o'
+	mov byte[prefijaAux+edi], 'o'
 	jmp iniciarCiclo
 	
 	print_bin:
-	mov byte[prefija+edi], 'b'
+	mov byte[prefijaAux+edi], 'b'
 	
 	iniciarCiclo:
 	inc edi
 	mov eax, [EBP+ebx+1] ;Mueve al eax el numero al que esta apuntando
 	
 	xor cx, cx
+	mov byte[flag_negativo], 0
+	
+	test eax, eax
+	jns ciclo1PAX ;Si no es negativo siga
+	
+	mov byte[flag_negativo], 1 ;Se indica que s un negativo
+	mov ecx, -1
+	imul ecx
+	xor ecx, ecx
+	
 	ciclo1PAX: mov bx, [EBP + 14] ;Se apunta a la casilla en turno
 		mov dl, [EBP+ebx] 	;Mueve al edx la base del numero al que esta apuntando
 		xor ebx, ebx
 		mov bl, dl			;Se mueve al bl el contenido del dl para dividir
 		xor edx, edx 		;Se limpia el edx
+
 		div ebx				;Y se hace la division
-		mov bx, [EBP +12] 	;Se obtiene el valor de una casilla sobre los numeros
+		
+		mov bx, [EBP + 12] 	;Se obtiene el valor de una casilla sobre los numeros
 		add bx, cx 			;Se desplza por el valor de cx
 		mov [EBP+ebx], dl 	;Y guarda el dl (el residuo de la division)
 		
@@ -642,34 +833,59 @@ ciclo_restaurar:
 		cmp eax, 0 ;Se comprueba si ya se termina la conversion
 		jne ciclo1PAX
 
-	ciclo2PAX:mov dl, [EBP+ebx] ;Se imprime el residuo del ultimo al primer
-		cmp dl, 9  
+	ciclo2PAX: mov dl, [EBP+ebx] ;Se imprime el residuo del ultimo al primer
+		cmp dl, 9 
 		ja letra   ;Si es mayor a 9 se aumenta 37 para llegar al caracter de letra que le coresponde
 		add dl, 30h ;Si no se aumenta solo en 30h
 		jmp printelo
 	letra: add dl, 37h
-	printelo: mov byte[prefija+edi], dl
+	printelo: mov byte[prefijaAux+edi], dl
 		dec ebx
 		inc edi
 		loop ciclo2PAX
-	mov byte[prefija+edi], 20h
-	inc edi
 	
+	mov byte[prefijaAux+edi], 20h
+	
+	inc edi
 	add word[EBP+14], 5 ;Se aumenta para llegar al siguiente puntero de base
+	
+	cmp byte[flag_negativo], 0
+	je ciclo_restaurar
+	
+	mov byte[prefijaAux+edi], '-'
+	inc edi
+	mov byte[prefijaAux+edi], 20h
+	inc edi
 	jmp ciclo_restaurar
 	
-final_resturar:
-	mov cl, byte[prefija+esi]
-	mov byte[prefija+edi], cl
+final_resturar: 
+	mov dl, byte[prefija+esi]
+	mov byte[prefijaAux+edi], dl
 	
 	inc esi
 	inc edi
-	cmp cl, 0
-	jne final_resturar
+	
+	cmp dl, 0
+	je ultimoPaso
+	
+	jmp final_resturar
+	;mov byte[prefija+edi-1], 
+ultimoPaso:
 	xor esi, esi
+	xor edi, edi
+	
+	cilo_ultPas:
+	mov dl, byte[prefijaAux+esi]
+	mov byte[prefija+edi], dl
+	
+	
+	inc esi
+	inc edi
+	
+	cmp dl, 0
+	jne cilo_ultPas
+		
     ret
-
-
 ;***------------------------------------------------------------------------------------------------------------***
 ;Proc: Convertir a decimal
 ; Recibe la base fuente en el EBP + 8, y el numero en el cl,procesa el numero para obtener su
@@ -686,7 +902,7 @@ error_conversion:
     ret
     
 ciclo_conversion: inc esi
-	mov cl, [prefija + esi]
+	mov cl, [ebx + esi]
     
     cmp cl, 20h ;Compara si hay un espacio
     je imprime  ;Si lo hay termina
@@ -715,14 +931,4 @@ ciclo_conversion: inc esi
     jmp ciclo_conversion
         
 imprime:
-	mov dl, [EBP+8] ; Se obtiene la base
-	xor ebx, ebx ;Se limpia el puntero de base
-	mov bx,[EBP+12] 	;La direccion de un puntero a base vacio
-	mov [EBP+ebx], dl 	;Se guarda la base
-	inc ebx				;Y en la siguiente casilla se guarda el número
-	mov [EBP+ebx], eax 	;Se guarda el numero
-	add word[EBP+12], 5 ;Se aumenta en 5 para apuntar a una casilla de base vacia
     ret
-	
-	
-	
