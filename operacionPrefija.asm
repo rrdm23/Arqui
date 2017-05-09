@@ -1,6 +1,6 @@
 %include  "io.mac"
 
-;Proyecto programado 1: Calculadora multi base bien tuanis que vamos a terminar en solo 3 dias
+;Proyecto programado 1: Calculadora multi base
 ;by: Óscar Cortés && Randall Delgado
 
 
@@ -167,7 +167,6 @@ final_obtBase:
     precedencia db '*', 10,  '/',10,  '+',5,  '-',5,  '%',10, '$',0
     resultado dd 0
     mostrarProced db 0;
-    prueba db "2",0
     flag_negativo db 0 ;valor booleano para saber si es negativo o no :)
 	
 
@@ -182,6 +181,7 @@ baseRespuesta resb 1 	;Guarda el valor de la base en la parte alta y el char de 
      .STARTUP    
 ;***------------------------------------Codigo segment------------------------------------ ***
 bienvenida: PutStr men_bienvenida
+mov byte[mostrarProced], 0
 nwln
 inicio: ;PutStr mensaje              ;Se indica al usuario que puede usar un número o un comando 
 	PutCh '>'
@@ -191,6 +191,8 @@ inicio: ;PutStr mensaje              ;Se indica al usuario que puede usar un nú
 	;Se comprueba primero si esta en blanco la linea de comandos
 	cmp byte[lineaComandos], 0 ;Primero si esta en blanco
 	je inicio
+	
+	enter 0,0 ;Se guardar el EBP
     
 	;Se eliminan los espacios antes de comprobar que hay
     mov ebx, lineaComandos		;Se mueve para eliminar los espacios
@@ -265,7 +267,11 @@ comandos: ;Hace una sere de comparaciones, si una comparacion es verdadera se ha
 
 ;Conversion de un numero a su complementoDeBase binario
     complementoDeBase:
-    PutStr mensajeTemp
+    mov ebx, lineaComandos 
+    mov esi, 1 ;Se indica que se lee el segundo caracter de base
+    call iniciarComplementoBase
+    jmp inicio
+    
     nwln
     jmp inicio
 
@@ -276,7 +282,7 @@ comandos: ;Hace una sere de comparaciones, si una comparacion es verdadera se ha
     jmp inicio
 
 ;Solucion de la operacion ingresada
-iniciarOperacion: enter 0,0 ;Se guardar el EBP
+iniciarOperacion: 
 	nwln
 	PutStr enun_operacion1 ;Enunciado de inicio operación
 	nwln
@@ -306,6 +312,95 @@ final:
 ;***------------------------------------Codigo ends------------------------------------ ***
 
 ;#-#-#-#-#-#-#-#-#-#-#-#-#-#-# Procs #-#-#-#-#-#-#-#-#-#-#-#-#-#-#
+;***------------------------------------------------------------------------------------------------------------***
+;Proc: iniciarComplemento de base
+;Inicia el proceso de sacar el complemento de base del contenido en el ebx con el esi apuntado al caracter de base
+iniciarComplementoBase:
+xor edx, edx
+mov cl, [ebx+esi] ;Se mueve el carcter al cl
+;Dependiendo del caracter se realiza un salt
+cmp cl, 'b'
+je complementoBin
+
+cmp cl, 'd'
+je complementoDec
+
+cmp cl, 'o'
+je complementoOct
+
+cmp cl, 'h'
+je complementoHex
+;Si no es un caracter de base se verifica que sea de numero
+
+cmp cl, '0';Si es menor a 0 da error
+jb errorComplemento
+
+cmp cl, '9';Si es mayot a 9 tambien
+ja errorComplemento
+
+dec esi ;Si es un numero se reduce el esi y se trata como un decimal
+
+;En base al caracter de base se guarda un valor en el dl
+complementoDec:
+	mov dl, 10
+	
+complementoBin:
+	mov dl, 2
+	
+complementoOct:
+	mov dl, 8
+
+complementoHex:
+	mov dl, 16
+	
+mov [EBP+8], edx
+call convertirADecimal ;Se obtiene el valor del numero en decimal
+PutLInt eax
+nwln
+call mostrarComplemento
+ret
+
+errorComplemento:
+	ret
+
+;Recibe el número en el eax, se encarga de mostrar los pasos de complemento de base 2
+mostrarComplemento: nwln 
+	call mostrarBits; 	;Se muestra el binario actual
+	nwln
+	not eax 			;Se cambian unos y ceros
+	call mostrarBits;	;Se muestra el cambio
+	nwln
+	PutCh '+'			;Se muestra que se suma 1
+	PutCh '1'
+	add eax, 1			;Se suma 1
+	nwln
+	call mostrarBits; 	;Y se muestra el resultado que seria el complemento
+
+	;Se restablece el eax para seguir con los procesos
+not eax		;Se niega a eax
+add eax, 1 	;Se suma 1
+nwln
+ret
+
+
+;Recibe en el eax el numero a imprimir. Lee los 1's y 0's para imprimirlos en pantalla
+mostrarBits:
+mov cx, 32
+ciclo_mostarBits:
+	rol eax, 1
+	jc mostrarUno
+	
+	;mostrarCero
+	PutCh '0'
+	jmp continuarMostBits
+	mostrarUno:
+		PutCh '1'
+	
+	continuarMostBits:
+	loop ciclo_mostarBits
+	
+	ret
+	
 ;***------------------------------------------------------------------------------------------------------------***
 ;Proc: Elmina espacios
 ;Recibe un string en el ebx, lee todo el string
@@ -638,14 +733,19 @@ final_ajustar:
 ; Lee la varibale prefija para 
 resolverPrefija: mov byte[resultado],0
 
-iniciarCicloResolver:
+iniciarCicloResolver: xor esi, esi ;Se limpia el esi
+	mov dword[EBP+12], 16 ;Se coloca en 12 al valor de referencia
+	xor ecx, ecx
 	
+	mov cl, byte[mostrarProced+0] ;Si esta apagado
+	cmp cl, 0
+	je ciclo_resolver ;se salta sin mostrar los pasos
+
 	PutCh '='
 	PutCh ' '
 	PutStr prefija ;Imprime paso a paso l
 	nwln
-	xor esi, esi ;Se limpia el esi
-	mov dword[EBP+12], 16 ;Se coloca en 12 al valor de referencia
+	
 	jmp ciclo_resolver
 
 espacio: inc esi
@@ -710,8 +810,10 @@ sumar: mov bx, [EBP+12] 	;Mueve el puntero a casilla de base vacia
 	test ecx, ecx	;Comprueba si el segundo operando negativo o positivo
 	js suma_negativo
 	
-	add eax, ecx 		;Se realiza la operacion
-	jmp guardarResultado
+	
+	realizarSuma:
+		add eax, ecx 		;Se realiza la operacion
+		jmp guardarResultado
 	
 	suma_negativo:
 		neg dword[EBP+ebx]
@@ -816,7 +918,6 @@ guardarResultado:
 	
 	dec ebx
 	mov [EBP+12], bx 	;Se guarda el puntero a la base del ultimo numero
-
 reiniciarCiclo:
 	call restausarPrefija
 	mov ebx, prefija
@@ -830,6 +931,12 @@ printSolucion: cmp byte[prefijaAux],0
 	PutCh '='
 	PutCh ' '
 	PutStr prefija ;Imprime la solucion de la opracion
+	PutCh ' '
+	PutCh '/'
+	mov eax, [resultado]
+	PutCh ' '
+	PutCh 'b'
+	call mostrarBits
 	nwln
 	ret
 
