@@ -70,7 +70,7 @@
 ;------------------------------------------------------------------------------------------
 ;Macro: cmpStrings
 ; Entrada: Dos cadenas de caracteres y un label
-; Compara dos cadenas de carcteres, si son iguales realiza el salto, si no lo son solo termina el macro
+; Compara dos cadenas de caracteres, si son iguales realiza el salto, si no lo son solo termina el macro
 %macro cmpStrings 3
     push esi
     xor esi, esi
@@ -136,19 +136,19 @@ final_obtBase:
 	men_bienvenida db "Calculadora4B",10, 13, "Ingrese #ayuda para consultar la ayuda de ser necesario.", 0
     mensaje db "Ingrese un comando o una operacion infija: ", 0
     
-    men_errorOverflow db "Error: Se ha generado un número con un mayor tamaño del que se puede trabajar.", 0
-    men_errorCaracter db "Error: Se ingreso una variable sin definir.", 0
-    men_errorBase db "Error: Se ingreso un número que no pertenece al base indicada.", 0
-    men_errorComando db "Error: No se ha encontrado el comando ingresado.", 0
-    men_ayuda db "La ayuda viene en camino, cuando Randy la escriba", 0
+    men_errorOverflow db "Error: Se ha generado un número con un mayor tamaño del que se puede trabajar.", 10, 13, 0
+    men_errorCaracter db "Error: Se ingreso una variable sin definir.", 10, 13, 0
+    men_errorBase db "Error: Se ingreso un número que no pertenece al base indicada.", 10, 13, 0
+    men_errorComando db "Error: No se ha encontrado el comando ingresado.", 10, 13, 0
+    men_ayuda db 10, 13, "Se encuentra en la ayuda. El programa consiste en una calculadora capaz de operar en bases como decimal, binario, octal y hexadecimal. Los comandos disponibles son los siguientes: ", 10, 13, "#ayuda: Muestra esta pantalla.", 10, 13, "#procedimiento: Activa o desactiva si se desea mostrar el procedimiento de la operación en binario.", 10, 13, "#bits: Útil para indicar cuántos bits de precisión se desean para las conversiones en punto flotante.", 10, 13, "#var: Muestra las variables definidas hasta el momento y su valor.", 10, 13, "#salir: Permite salir del programa.", 10, 13, 10, 13, 0
     men_procedOn db "Ahora se mostraran los procedimientos.", 0
     men_procedOff db "Ahora se ocultaran los procedimientos.", 0
     
     mensajeTemp db "Ahorita no joven, estamos terminado esta parte del codigo",0
 	igual db '=',0
-    
+    mensajeSalida db "Instituto Tecnológico de Costa Rica", 10, 13, "Ingeniería en Computación", 10, 13, "IC-3101 Arquitectura de Computadores", 10, 13, "Prof. Esteban Arias Méndez", 10, 13, "Óscar Cortés Cordero - Randall Delgado Miranda", 10, 13, "I Semestre 2017", 10, 13, 0
     comando_ayuda db "#ayuda", 0
-    comando_procedimientos db "#procedimientos", 0
+    comando_procedimientos db "#procedimiento", 0
     comando_bits db "#bits", 0
     comando_var db "#var", 0
     comando_salir db "#salir", 0
@@ -168,7 +168,7 @@ final_obtBase:
     resultado dd 0
     mostrarProced db 0;
     prueba db "2",0
-    flag_negativo db 0 ;valor booleano para saber si es negativo ono :)
+    flag_negativo db 0 ;valor booleano para saber si es negativo o no :)
 	
 
 .UDATA
@@ -176,7 +176,7 @@ strComplemento resb 256	;No sé, aqui se lo deje a Randy
 prefija resb 256		;Se usa para guardar la expresion prefija
 prefijaAux resb 256		;Se tiene un respaldo de 256 bytes para guardar las operaciones
 lineaComandos resb 256	;Se reservan 256 bytes para la linea de comandos
-variable reb 15 		;Se reservan 15 bytes por variable
+variable resb 15 		;Se reservan 15 bytes por variable
 baseRespuesta resb 1 	;Guarda el valor de la base en la parte alta y el char de la base en la parte baja
 .CODE
      .STARTUP    
@@ -235,14 +235,14 @@ declararVariable:
 ;Lectura de los comandos
 comandos: ;Hace una sere de comparaciones, si una comparacion es verdadera se hace un salto, sino se pasa a la siguiente comparacion
     cmpStrings lineaComandos, comando_ayuda, printAyuda
-    cmpStrings lineaComandos, comando_procedimientos, final
+    cmpStrings lineaComandos, comando_procedimientos, cambEstadoProc
     cmpStrings lineaComandos, comando_bits, final
     cmpStrings lineaComandos, comando_var, final
     cmpStrings lineaComandos, comando_salir, final
     
-    PutStr men_errorComando ;Si el comando no es comatible con nadie.. 
+    PutStr men_errorComando ;Si el comando no es compatible con nadie.. 
     nwln
-    jmp inicio  ;
+    jmp inicio  
     
     printAyuda:
         PutStr men_ayuda
@@ -263,13 +263,15 @@ comandos: ;Hace una sere de comparaciones, si una comparacion es verdadera se ha
         nwln
         jmp inicio
 
-;Converison de un numero a su complementoDeBase binario
-complementoDeBase:PutStr mensajeTemp
+;Conversion de un numero a su complementoDeBase binario
+    complementoDeBase:
+    PutStr mensajeTemp
     nwln
     jmp inicio
 
 ;Conversion del numero a binario flotante
-convPuntoBinario:PutStr mensajeTemp
+    convPuntoBinario:
+    PutStr mensajeTemp
     nwln
     jmp inicio
 
@@ -298,6 +300,7 @@ resolver:
     jmp inicio
            
 final:
+    PutStr mensajeSalida
     nwln
 .EXIT
 ;***------------------------------------Codigo ends------------------------------------ ***
@@ -983,7 +986,7 @@ ciclo_conversion: inc esi
     cmp cl, 20h ;Compara si hay un espacio
     je imprime  ;Si lo hay termina
     
-    cmp cl, 0 ;Si es un 0 tmabien se termina
+    cmp cl, 0 ;Si es un 0 tambien se termina
     je imprime
 	
 	mov edx, [EBP+8]	;El edx guarda la base destino algo temporal
