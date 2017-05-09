@@ -137,14 +137,16 @@ final_obtBase:
     mensaje db "Ingrese un comando o una operacion infija: ", 0
     
     men_errorOverflow db "Error: Se ha generado un número con un mayor tamaño del que se puede trabajar.", 10, 13, 0
-    men_errorCaracter db "Error: Se ingreso una variable sin definir.", 10, 13, 0
+    men_errorCaracter db "Error: Se ingreso una caracter no permitido.", 10, 13, 0
     men_errorBase db "Error: Se ingreso un número que no pertenece al base indicada.", 10, 13, 0
     men_errorComando db "Error: No se ha encontrado el comando ingresado.", 10, 13, 0
+    men_errorDivision db "Error: Se ha detectado una division por 0.", 0
+    men_errorConectores db "Error: Se presento un error con la cantidad de conectores.", 0
+    
     men_ayuda db 10, 13, "Se encuentra en la ayuda. El programa consiste en una calculadora capaz de operar en bases como decimal, binario, octal y hexadecimal. Los comandos disponibles son los siguientes: ", 10, 13, "#ayuda: Muestra esta pantalla.", 10, 13, "#procedimiento: Activa o desactiva si se desea mostrar el procedimiento de la operación en binario.", 10, 13, "#bits: Útil para indicar cuántos bits de precisión se desean para las conversiones en punto flotante.", 10, 13, "#var: Muestra las variables definidas hasta el momento y su valor.", 10, 13, "#salir: Permite salir del programa.", 10, 13, 10, 13, 0
     men_procedOn db "Ahora se mostraran los procedimientos.", 0
     men_procedOff db "Ahora se ocultaran los procedimientos.", 0
     
-    mensajeTemp db "Ahorita no joven, estamos terminado esta parte del codigo",0
 	igual db '=',0
     mensajeSalida db "Instituto Tecnológico de Costa Rica", 10, 13, "Ingeniería en Computación", 10, 13, "IC-3101 Arquitectura de Computadores", 10, 13, "Prof. Esteban Arias Méndez", 10, 13, "Óscar Cortés Cordero - Randall Delgado Miranda", 10, 13, "I Semestre 2017", 10, 13, 0
     comando_ayuda db "#ayuda", 0
@@ -277,7 +279,6 @@ comandos: ;Hace una sere de comparaciones, si una comparacion es verdadera se ha
 
 ;Conversion del numero a binario flotante
     convPuntoBinario:
-    PutStr mensajeTemp
     nwln
     jmp inicio
 
@@ -361,6 +362,7 @@ call mostrarComplemento
 ret
 
 errorComplemento:
+	PutStr men_errorCaracter
 	ret
 
 ;Recibe el número en el eax, se encarga de mostrar los pasos de complemento de base 2
@@ -813,6 +815,7 @@ sumar: mov bx, [EBP+12] 	;Mueve el puntero a casilla de base vacia
 	
 	realizarSuma:
 		add eax, ecx 		;Se realiza la operacion
+		jo error_overflow
 		jmp guardarResultado
 	
 	suma_negativo:
@@ -861,6 +864,7 @@ multiplicar: mov bx, [EBP+12] 	;Mueve el puntero a casilla de base vacia
 	sub bx, 5			;Se apunta al numero anterior
 	mov eax, [EBP+ebx] 	;Se guarda el numero en ecx
 	mul ecx				;Se realiza la operacion
+	jo error_overflow
 	jmp guardarResultado
 
 dividir: mov bx, [EBP+12] 	;Mueve el puntero a casilla de base vacia
@@ -905,9 +909,17 @@ divModulo:mov bx, [EBP+12] 	;Mueve el puntero a casilla de base vacia
 	jmp guardarResultado
 	
 error_cantConectores:
+	PutStr men_errorConectores 
+	nwln
 	ret
 
-error_divisionCero:		;Aqui seria colocar un print y luego un ret
+error_divisionCero:		
+	PutStr men_errorDivision
+	ret
+
+error_overflow:
+	PutStr men_errorOverflow
+	nwln
 	ret
 
 guardarResultado:
@@ -1084,7 +1096,8 @@ error_conversion:
     nwln
     ret
     
-error_overflowC:
+error_overflowC: PutStr men_errorOverflow
+	nwln
 	ret
     
 ciclo_conversion: inc esi
